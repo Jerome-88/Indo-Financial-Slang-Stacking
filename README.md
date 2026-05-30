@@ -13,9 +13,9 @@ AOL_NLP/
 │   ├── app.py              # FastAPI inference server
 │   └── train.py            # Transformer training pipeline (K-Fold CV)
 ├── notebooks/
-│   ├── 01_merge.ipynb              # Merge 4 raw datasets into one
-│   ├── 02_preprocess.ipynb         # Clean & normalize text
-│   └── 03_hyperparameter_search.ipynb  # Traditional ML experiments
+│   ├── merge.ipynb              # Merge 4 raw datasets into one
+│   ├── preprocess.ipynb         # Clean & normalize text
+│   └── train_experiment.ipynb  # Traditional ML experiments
 ├── Dataset/
 │   └── dataset_final_clean.csv     # Final preprocessed dataset (6,119 rows)
 ├── model_final/
@@ -89,9 +89,9 @@ python backend/train.py
 
 Run notebooks in order:
 
-1. `01_merge.ipynb` — merge raw datasets → `dataset_combined_final.csv`
-2. `02_preprocess.ipynb` — clean & normalize → `Dataset/dataset_final_clean.csv`
-3. `03_hyperparameter_search.ipynb` — tune traditional ML models → `model_final/`
+1. `merge.ipynb`  merge raw datasets -> `dataset_combined_final.csv`
+2. `preprocess.ipynb`  clean & normalize -> `Dataset/dataset_final_clean.csv`
+3. `hyperparameter_search.ipynb`  tune traditional ML models -> `model_final/`
 
 ## API Endpoints
 
