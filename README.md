@@ -46,14 +46,14 @@ AOL_NLP/
 
 ## Dataset
 
-Merged from 4 sources (6,140 → 6,119 rows after cleaning):
+Merged from 4 sources (6,140 → 6,120 rows after cleaning):
 
 | Source | Platform | Records |
 |---|---|---|
 | IDSMSA | Twitter | 3,288 |
-| ARTO | Stockbit | 499 |
-| ICCSCI | Stockbit | 1,853 |
-| PTBA | Stockbit | 500 |
+| ARTO | Stockbit | 495 |
+| ICCSCI | Stockbit | 1,842 |
+| PTBA | Stockbit | 495 |
 
 ## Setup
 
