@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+
+# Large transformer model weights (download separately or generate via train.py)
+*.pt
+saved_models_run_*/
+results_run_*/
+
+# Intermediate data artifacts (regenerate via notebooks)
+dataset_combined_final.csv
+
+# OS
+.DS_Store
+Thumbs.db

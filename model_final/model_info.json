@@ -1,0 +1,61 @@
+{
+  "timestamp": "2026-05-30 17:24:12",
+  "note": "Pipeline(TF-IDF + model). Load langsung & predict dari raw text.",
+  "tfidf_config": {
+    "ngram_range": [
+      1,
+      2
+    ],
+    "max_features": 30000,
+    "min_df": 3,
+    "sublinear_tf": true
+  },
+  "label_map": {
+    "Negative": 0,
+    "Neutral": 1,
+    "Positive": 2
+  },
+  "label_names": [
+    "Negative",
+    "Neutral",
+    "Positive"
+  ],
+  "models": {
+    "SVM": {
+      "config": "C=0.05",
+      "val_f1": 0.607,
+      "std": 0.014,
+      "train_f1": 0.755,
+      "gap": 0.1479,
+      "status": "mild",
+      "path": "model_final/pipeline_svm.joblib"
+    },
+    "LR": {
+      "config": "C=0.10",
+      "val_f1": 0.6184,
+      "std": 0.0085,
+      "train_f1": 0.7363,
+      "gap": 0.1178,
+      "status": "mild",
+      "path": "model_final/pipeline_lr.joblib"
+    },
+    "RF": {
+      "config": "d=20 l=5",
+      "val_f1": 0.5681,
+      "std": 0.0154,
+      "train_f1": 0.6319,
+      "gap": 0.0639,
+      "status": "OK",
+      "path": "model_final/pipeline_rf.joblib"
+    },
+    "XGBoost": {
+      "config": "d=3 a=0.5",
+      "val_f1": 0.6093,
+      "std": 0.0141,
+      "train_f1": 0.7479,
+      "gap": 0.1385,
+      "status": "mild",
+      "path": "model_final/pipeline_xgboost.joblib"
+    }
+  }
+}

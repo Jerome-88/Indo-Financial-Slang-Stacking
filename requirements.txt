@@ -1,0 +1,24 @@
+# API server
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
+# ML — Deep Learning
+torch>=2.2.0
+transformers>=4.40.0
+
+# ML — Traditional
+scikit-learn>=1.4.0
+xgboost>=2.0.0
+joblib>=1.4.0
+
+# Data
+numpy>=1.26.0
+pandas>=2.2.0
+openpyxl>=3.1.0
+
+# NLP preprocessing
+emoji>=2.12.0
+
+# Visualization (notebooks)
+matplotlib>=3.8.0
