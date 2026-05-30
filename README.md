@@ -70,13 +70,13 @@ cd frontend && npm install
 **Backend (FastAPI):**
 ```bash
 python backend/app.py
-# → http://localhost:8000
+# http://localhost:8000
 ```
 
 **Frontend (React dev server):**
 ```bash
 cd frontend && npm run dev
-# → http://localhost:5173
+# http://localhost:5173
 ```
 
 **Train transformers:**
