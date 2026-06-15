@@ -1,5 +1,6 @@
 
 import json
+import os
 import time
 import joblib
 import logging
@@ -8,12 +9,19 @@ from pathlib import Path
 from datetime import datetime
 from contextlib import asynccontextmanager
 
-import torch
-from torch.cuda.amp import autocast
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+try:
+    import torch
+    from torch.cuda.amp import autocast
+    from transformers import AutoTokenizer, AutoModelForSequenceClassification
+    from huggingface_hub import hf_hub_download
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -37,21 +45,28 @@ TRADITIONAL_MODEL_PATHS = {
 }
 
 # model transformer
+# Set HF_MODEL_REPO env var on HF Spaces to enable auto-download of .pt weights.
+# Example: HF_MODEL_REPO = "yourname/cs-idx30-models"
+HF_MODEL_REPO = os.getenv("HF_MODEL_REPO", "")
+
 TRANSFORMER_CONFIGS = {
     "indobert": {
-        "checkpoint" : "indobenchmark/indobert-base-p2",
-        "weights"    : str(BASE_DIR / "saved_models_run_20260514_192555/indobert_fold2.pt"),
-        "max_len"    : 128,
+        "checkpoint"  : "indobenchmark/indobert-base-p2",
+        "weights"     : str(BASE_DIR / "saved_models_run_20260514_192555/indobert_fold2.pt"),
+        "hf_filename" : "indobert_fold2.pt",
+        "max_len"     : 128,
     },
     "indoroberta": {
-        "checkpoint" : "indolem/indobertweet-base-uncased",
-        "weights"    : str(BASE_DIR / "saved_models_run_20260514_192555/indoroberta_fold1.pt"),
-        "max_len"    : 128,
+        "checkpoint"  : "indolem/indobertweet-base-uncased",
+        "weights"     : str(BASE_DIR / "saved_models_run_20260514_192555/indoroberta_fold1.pt"),
+        "hf_filename" : "indoroberta_fold1.pt",
+        "max_len"     : 128,
     },
     "xlmr": {
-        "checkpoint" : "xlm-roberta-base",
-        "weights"    : str(BASE_DIR / "saved_models_run_20260514_192555/xlmr_fold1.pt"),
-        "max_len"    : 128,
+        "checkpoint"  : "xlm-roberta-base",
+        "weights"     : str(BASE_DIR / "saved_models_run_20260514_192555/xlmr_fold1.pt"),
+        "hf_filename" : "xlmr_fold1.pt",
+        "max_len"     : 128,
     },
 }
 
@@ -64,17 +79,18 @@ logger = logging.getLogger(__name__)
 
 class ModelRegistry:
     def __init__(self):
-        self.device      = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.use_amp     = self.device.type == "cuda"
+        if TORCH_AVAILABLE:
+            self.device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.use_amp = self.device.type == "cuda"
+        else:
+            self.device  = None
+            self.use_amp = False
 
-        #Shared vectorizer
-        self.vectorizer        = None
-        self.traditional_models = {}  
-        self.best_traditional_name = "unknown"
-
-        # Transformers
-        self.transformers  = {}   
-        self.loaded_models = []
+        self.vectorizer             = None
+        self.traditional_models     = {}
+        self.best_traditional_name  = "unknown"
+        self.transformers           = {}
+        self.loaded_models          = []
 
     def load_traditional(self):
         if Path(VECTORIZER_PATH).exists():
@@ -104,16 +120,31 @@ class ModelRegistry:
             logger.info(f"Best traditional: {self.best_traditional_name}")
 
     def load_transformer(self, name: str, cfg: dict):
-        if not Path(cfg["weights"]).exists():
-            logger.warning(f"Weights not found: {cfg['weights']}  skipping {name}")
+        if not TORCH_AVAILABLE:
+            logger.warning(f"torch/transformers not installed — skipping {name}")
             return
+
+        weights_path = cfg["weights"]
+
+        if not Path(weights_path).exists():
+            if HF_MODEL_REPO:
+                try:
+                    logger.info(f"Downloading {name} weights from {HF_MODEL_REPO} ...")
+                    weights_path = hf_hub_download(repo_id=HF_MODEL_REPO, filename=cfg["hf_filename"])
+                    logger.info(f"Downloaded: {weights_path}")
+                except Exception as e:
+                    logger.warning(f"HF Hub download failed for {name}: {e}  skipping")
+                    return
+            else:
+                logger.warning(f"Weights not found: {weights_path}  skipping {name}")
+                return
 
         logger.info(f"Loading transformer: {name}...")
         tokenizer = AutoTokenizer.from_pretrained(cfg["checkpoint"])
         model     = AutoModelForSequenceClassification.from_pretrained(
             cfg["checkpoint"], num_labels=3
         )
-        model.load_state_dict(torch.load(cfg["weights"], map_location=self.device))
+        model.load_state_dict(torch.load(weights_path, map_location=self.device))
         model.to(self.device)
         model.eval()
 
@@ -126,10 +157,13 @@ class ModelRegistry:
         logger.info(f"{name} loaded on {self.device}")
 
     def load_all(self):
-        logger.info(f"Device: {self.device}")
+        logger.info(f"Device: {self.device}  |  torch_available: {TORCH_AVAILABLE}")
         self.load_traditional()
-        for name, cfg in TRANSFORMER_CONFIGS.items():
-            self.load_transformer(name, cfg)
+        if TORCH_AVAILABLE:
+            for name, cfg in TRANSFORMER_CONFIGS.items():
+                self.load_transformer(name, cfg)
+        else:
+            logger.warning("Transformer models skipped (torch not installed)")
         logger.info(f"Loaded models: {self.loaded_models}")
 
 registry = ModelRegistry()
@@ -552,6 +586,54 @@ def run_predict(text: str, model: str) -> dict:
     else:
         return predict_transformer(text, model)
 
+SLANG_DICTIONARY = [
+    {"term": "Cuan", "meaning": "Keuntungan atau profit dari investasi/trading saham.", "example": "Saham BBCA naik 5% hari ini, cuan terus!", "category": "Profit & Rugi"},
+    {"term": "Nyangkut", "meaning": "Kondisi saham yang sudah dibeli namun harganya turun terus sehingga susah dijual tanpa rugi besar.", "example": "Beli GOTO di harga 200 sekarang tinggal 80, nyangkut parah nih.", "category": "Profit & Rugi"},
+    {"term": "Cut Loss", "meaning": "Menjual saham yang sedang merugi untuk membatasi kerugian lebih lanjut.", "example": "Daripada nyangkut makin dalam, mending cut loss sekarang.", "category": "Strategi"},
+    {"term": "FOMO", "meaning": "Fear Of Missing Out – rasa takut ketinggalan momentum beli sehingga investor terburu-buru masuk tanpa analisis.", "example": "Jangan FOMO beli saham yang sudah naik 50% dalam sehari.", "category": "Sentimen"},
+    {"term": "Serok", "meaning": "Membeli saham dalam jumlah besar sekaligus, biasanya saat harga dianggap murah.", "example": "Pas IHSG drop 3%, gue langsung serok BBRI sebanyak mungkin.", "category": "Aksi Pasar"},
+    {"term": "ARA", "meaning": "Auto Reject Atas – batas maksimal kenaikan harga saham dalam sehari yang ditetapkan BEI.", "example": "Saham HAKA kena ARA tiga hari berturut-turut, euforia banget!", "category": "Mekanisme Bursa"},
+    {"term": "ARB", "meaning": "Auto Reject Bawah – batas maksimal penurunan harga saham dalam sehari yang ditetapkan BEI.", "example": "Saham itu kena ARB lagi, hati-hati bisa terjebak di sana.", "category": "Mekanisme Bursa"},
+    {"term": "Gorengan", "meaning": "Saham dengan harga murah dan likuiditas rendah yang mudah dimanipulasi untuk dipompa naik lalu dijual.", "example": "Jangan tergiur saham gorengan, risikonya tinggi banget.", "category": "Tipe Saham"},
+    {"term": "Bandar", "meaning": "Pihak (biasanya institusi atau individu kaya) yang diduga memanipulasi pergerakan harga saham tertentu.", "example": "Harga tiba-tiba naik drastis, kayaknya bandar lagi masuk nih.", "category": "Pelaku Pasar"},
+    {"term": "Mantul", "meaning": "Singkatan dari 'mantap betul' atau berarti harga saham yang memantul naik setelah menyentuh support.", "example": "Setelah turun ke support 1500, TLKM mantul naik lagi.", "category": "Kondisi Pasar"},
+    {"term": "Ngacir", "meaning": "Harga saham yang turun dengan sangat cepat.", "example": "Berita negatif keluar, sahamnya langsung ngacir ke bawah.", "category": "Kondisi Pasar"},
+    {"term": "Porto", "meaning": "Singkatan dari portofolio, kumpulan aset investasi yang dimiliki seseorang.", "example": "Porto gue lagi merah semua karena IHSG turun.", "category": "Investasi"},
+    {"term": "Averaging Down", "meaning": "Strategi membeli lebih banyak saham saat harga turun untuk meratakan harga beli rata-rata.", "example": "Saham ini fundamentalnya bagus, gue averaging down dulu.", "category": "Strategi"},
+    {"term": "Averaging Up", "meaning": "Menambah posisi saham saat harganya sedang naik untuk memaksimalkan keuntungan.", "example": "Tren naik kuat, gue averaging up terus selagi momentum.", "category": "Strategi"},
+    {"term": "Bullish", "meaning": "Kondisi pasar atau pandangan optimis bahwa harga akan terus naik.", "example": "Analis besar pada bullish terhadap sektor perbankan.", "category": "Kondisi Pasar"},
+    {"term": "Bearish", "meaning": "Kondisi pasar atau pandangan pesimis bahwa harga akan terus turun.", "example": "Sentimen global bearish bikin IHSG ikut melemah.", "category": "Kondisi Pasar"},
+    {"term": "Sideway", "meaning": "Pergerakan harga yang datar dan tidak signifikan, tidak naik maupun turun jauh.", "example": "Saham ini udah sideway tiga bulan, bosan nunggunya.", "category": "Kondisi Pasar"},
+    {"term": "Breakout", "meaning": "Harga menembus level resistance yang sebelumnya sulit ditembus.", "example": "BBCA baru breakout dari resistance 9500, sinyal beli kuat.", "category": "Analisis Teknikal"},
+    {"term": "Support", "meaning": "Level harga di mana tekanan beli cukup kuat untuk menghentikan penurunan harga.", "example": "IHSG menguji support 7000, kalau jebol bisa turun lebih dalam.", "category": "Analisis Teknikal"},
+    {"term": "Resistance", "meaning": "Level harga di mana tekanan jual cukup kuat untuk menghentikan kenaikan.", "example": "Resistance kuat di 8000, harga belum berhasil tembusnya.", "category": "Analisis Teknikal"},
+    {"term": "Scalping", "meaning": "Strategi trading jangka sangat pendek (menit hingga jam) untuk mendapat profit kecil tapi sering.", "example": "Gue scalping BBRI pagi ini, in-out tiga kali dapat cuan tipis-tipis.", "category": "Strategi"},
+    {"term": "Swing Trade", "meaning": "Trading dengan horizon menengah, biasanya beberapa hari hingga beberapa minggu.", "example": "Ini swing trade, targetnya naik 10% dalam dua minggu.", "category": "Strategi"},
+    {"term": "All In", "meaning": "Menggunakan seluruh modal yang tersedia untuk membeli satu saham.", "example": "Gue all in TLKM karena yakin banget sama prospeknya.", "category": "Strategi"},
+    {"term": "Panic Selling", "meaning": "Aksi jual massal karena kepanikan, biasanya saat ada berita negatif besar.", "example": "Pas corona 2020 banyak yang panic selling, padahal harusnya beli.", "category": "Aksi Pasar"},
+    {"term": "Profit Taking", "meaning": "Aksi jual saham untuk merealisasikan keuntungan yang sudah didapat.", "example": "Saham naik 20%, banyak investor profit taking sehingga harga koreksi.", "category": "Aksi Pasar"},
+    {"term": "Blue Chip", "meaning": "Saham perusahaan besar, terkenal, dan stabil secara finansial.", "example": "Buat investasi jangka panjang, pilih blue chip seperti BBCA atau TLKM.", "category": "Tipe Saham"},
+    {"term": "Penny Stock", "meaning": "Saham dengan harga sangat murah, biasanya di bawah Rp 200 per lembar.", "example": "Penny stock memang murah, tapi likuiditasnya rendah dan risikonya tinggi.", "category": "Tipe Saham"},
+    {"term": "Saham Tidur", "meaning": "Saham yang sangat jarang diperdagangkan sehingga harganya tidak bergerak.", "example": "Jangan beli saham tidur, susah jualnya nanti.", "category": "Tipe Saham"},
+    {"term": "Lot", "meaning": "Satuan perdagangan saham di BEI, di mana 1 lot = 100 lembar saham.", "example": "Gue beli 10 lot BBRI, berarti 1000 lembar saham.", "category": "Mekanisme Bursa"},
+    {"term": "IHSG", "meaning": "Indeks Harga Saham Gabungan – indeks utama yang mencerminkan kinerja seluruh saham di Bursa Efek Indonesia.", "example": "IHSG turun 2% hari ini karena sentimen global memburuk.", "category": "Indeks"},
+    {"term": "IPO", "meaning": "Initial Public Offering – penawaran saham perdana perusahaan kepada publik melalui bursa.", "example": "IPO saham GOTO kemarin oversubscribed berkali-kali lipat.", "category": "Aksi Korporasi"},
+    {"term": "Dividen", "meaning": "Pembagian keuntungan perusahaan kepada para pemegang saham.", "example": "BBCA bagi dividen Rp 340 per saham, lumayan cuan pasif.", "category": "Investasi"},
+    {"term": "Pump and Dump", "meaning": "Manipulasi pasar: harga saham dipompa naik oleh sekelompok pihak lalu dijual saat sudah tinggi, merugikan investor lain.", "example": "Hati-hati dengan saham yang tiba-tiba naik 100% tanpa alasan, bisa jadi pump and dump.", "category": "Manipulasi Pasar"},
+    {"term": "Margin Call", "meaning": "Peringatan dari broker untuk menambah dana jaminan karena posisi margin sudah mencapai batas risiko.", "example": "Harga turun terus, broker kasih margin call, terpaksa jual saham.", "category": "Risiko"},
+    {"term": "TP (Take Profit)", "meaning": "Target harga jual di mana investor berencana merealisasikan keuntungan.", "example": "TP gue di harga 5000, kalau sudah nyentuh sana langsung jual.", "category": "Strategi"},
+    {"term": "SL (Stop Loss)", "meaning": "Batas harga jual otomatis untuk membatasi kerugian jika harga turun terlalu jauh.", "example": "Pasang SL di 10% bawah harga beli biar tidak rugi terlalu banyak.", "category": "Strategi"},
+    {"term": "Emot", "meaning": "Trading secara emosional, mengambil keputusan beli/jual berdasarkan perasaan bukan analisis.", "example": "Jangan emot saat porto merah, stick to the plan!", "category": "Sentimen"},
+    {"term": "YOLO", "meaning": "You Only Live Once – ungkapan untuk keputusan trading berisiko tinggi dengan modal besar.", "example": "YOLO all in saham gorengan itu berbahaya banget bro.", "category": "Sentimen"},
+    {"term": "Diamond Hands", "meaning": "Istilah untuk investor yang teguh memegang saham meski harga turun jauh.", "example": "Gue diamond hands GOTO dari IPO, yakin bakal balik.", "category": "Strategi"},
+    {"term": "Nabung Saham", "meaning": "Strategi membeli saham secara rutin dan berkala dalam jumlah kecil terlepas dari kondisi pasar.", "example": "Gue nabung saham BBCA tiap bulan sejak 5 tahun lalu, sekarang hasilnya lumayan.", "category": "Strategi"},
+    {"term": "Delisting", "meaning": "Pencabutan saham dari daftar perdagangan Bursa Efek Indonesia.", "example": "Perusahaan itu terancam delisting karena tidak memenuhi syarat BEI.", "category": "Mekanisme Bursa"},
+    {"term": "Right Issue", "meaning": "Penawaran saham baru kepada pemegang saham lama dengan harga khusus (biasanya lebih murah).", "example": "BRIS right issue untuk ekspansi bisnis, dilusi tapi fundamentalnya masih kuat.", "category": "Aksi Korporasi"},
+    {"term": "Stock Split", "meaning": "Pemecahan saham menjadi lebih banyak lembar dengan harga lebih rendah; nilai total tidak berubah.", "example": "Setelah stock split 1:5, harga BBCA jadi lebih terjangkau untuk ritel.", "category": "Aksi Korporasi"},
+    {"term": "Volatilitas", "meaning": "Tingkat fluktuasi atau perubahan harga saham dalam periode tertentu.", "example": "Saham small cap punya volatilitas tinggi, bisa naik atau turun tajam.", "category": "Analisis"},
+    {"term": "Likuiditas", "meaning": "Kemudahan membeli atau menjual saham tanpa mempengaruhi harga secara signifikan.", "example": "Blue chip punya likuiditas tinggi, mudah beli dan jual kapan saja.", "category": "Analisis"},
+]
+
 #endpoint
 
 @app.get("/", tags=["Health"])
@@ -629,6 +711,20 @@ def predict_batch(req: BatchPredictRequest):
     )
 
 
+@app.get("/slang/search", tags=["Slang Dictionary"])
+def search_slang(q: str = ""):
+    if not q.strip():
+        return {"results": SLANG_DICTIONARY, "total": len(SLANG_DICTIONARY), "query": ""}
+    q_lower = q.strip().lower()
+    results = [
+        entry for entry in SLANG_DICTIONARY
+        if q_lower in entry["term"].lower()
+        or q_lower in entry["meaning"].lower()
+        or q_lower in entry["category"].lower()
+    ]
+    return {"results": results, "total": len(results), "query": q}
+
+
 @app.post("/predict/multi", tags=["Inference"])
 def predict_multi(req: MultiPredictRequest):
     start = time.time()
@@ -649,6 +745,16 @@ def predict_multi(req: MultiPredictRequest):
 
     total_elapsed = round((time.time() - start) * 1000, 2)
     return {"results": results, "model_count": len(req.models), "latency_ms": total_elapsed}
+
+FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="static-assets")
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(_full_path: str = ""):
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,0 +1,14 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/predict/:path*",
+      "destination": "https://siomay88-aol-nlp.hf.space/predict/:path*"
+    },
+    {
+      "source": "/slang/:path*",
+      "destination": "https://siomay88-aol-nlp.hf.space/slang/:path*"
+    }
+  ]
+}

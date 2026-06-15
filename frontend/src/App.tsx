@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ArrowRight, CloudUpload, Cpu, Filter, Sparkles } from 'lucide-react';
+import { useMemo, useEffect, useRef, useState } from 'react';
+import { ArrowRight, BookOpen, CloudUpload, Cpu, Filter, Search, Sparkles, X } from 'lucide-react';
 import { RadialBar, RadialBarChart, ResponsiveContainer, Tooltip } from 'recharts';
 
 type ModelKey =
@@ -79,6 +79,151 @@ const sentimentTone = (label: string) => {
 //     </footer>
 //   );
 // }
+
+type SlangEntry = {
+  term: string;
+  meaning: string;
+  example: string;
+  category: string;
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  'Profit & Rugi'      : 'bg-emerald-500/15 text-emerald-300',
+  'Strategi'           : 'bg-cyan-500/15 text-cyan-300',
+  'Sentimen'           : 'bg-violet-500/15 text-violet-300',
+  'Kondisi Pasar'      : 'bg-amber-400/10 text-amber-300',
+  'Aksi Pasar'         : 'bg-sky-500/15 text-sky-300',
+  'Mekanisme Bursa'    : 'bg-slate-500/20 text-slate-300',
+  'Tipe Saham'         : 'bg-orange-500/15 text-orange-300',
+  'Pelaku Pasar'       : 'bg-pink-500/15 text-pink-300',
+  'Analisis Teknikal'  : 'bg-teal-500/15 text-teal-300',
+  'Analisis'           : 'bg-teal-500/15 text-teal-300',
+  'Investasi'          : 'bg-lime-500/15 text-lime-300',
+  'Indeks'             : 'bg-indigo-500/15 text-indigo-300',
+  'Aksi Korporasi'     : 'bg-rose-500/15 text-rose-300',
+  'Manipulasi Pasar'   : 'bg-red-500/15 text-red-300',
+  'Risiko'             : 'bg-red-500/15 text-red-300',
+};
+
+function SlangSearch() {
+  const [query, setQuery] = useState('');
+  const [allSlang, setAllSlang] = useState<SlangEntry[]>([]);
+  const [fetchError, setFetchError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch('/slang/search')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (!Array.isArray(data.results)) throw new Error('Format respons tidak valid');
+        setAllSlang(data.results);
+      })
+      .catch((err: Error) => setFetchError(`Gagal memuat kamus slang: ${err.message}. Pastikan backend sudah di-restart.`));
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return allSlang;
+    const q = query.trim().toLowerCase();
+    return allSlang.filter(
+      (e) =>
+        e.term.toLowerCase().includes(q) ||
+        e.meaning.toLowerCase().includes(q) ||
+        e.category.toLowerCase().includes(q),
+    );
+  }, [query, allSlang]);
+
+  const categories = useMemo(
+    () => Array.from(new Set(allSlang.map((e) => e.category))).sort(),
+    [allSlang],
+  );
+
+  return (
+    <div className="rounded-[2rem] border border-white/10 bg-slate-900/80 p-8 shadow-glow">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.35em] text-cyan-300/80">Financial Slang Dictionary</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-100 flex items-center gap-3">
+            <BookOpen className="h-6 w-6 text-cyan-400" />
+            Kamus Slang Finansial Indonesia
+          </h2>
+          <p className="mt-2 text-sm text-slate-400">
+            Cari arti kata slang yang sering dipakai di komunitas investor dan trader Indonesia.
+          </p>
+        </div>
+        <div className="text-sm text-slate-500">
+          {allSlang.length > 0 && `${filtered.length} / ${allSlang.length} istilah`}
+        </div>
+      </div>
+
+      <div className="relative mb-6">
+        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500 pointer-events-none" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder='Cari istilah slang... contoh: "cuan", "nyangkut", "ARA"'
+          className="w-full rounded-[1.75rem] border border-white/10 bg-slate-950/90 py-3 pl-11 pr-10 text-sm text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/10 placeholder:text-slate-600"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => { setQuery(''); inputRef.current?.focus(); }}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {!query && allSlang.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setQuery(cat)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition hover:opacity-80 ${CATEGORY_COLORS[cat] ?? 'bg-slate-700/40 text-slate-300'}`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {fetchError ? (
+        <p className="text-sm text-rose-300">{fetchError}</p>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-[1.75rem] border border-white/10 bg-slate-950/60 p-8 text-center text-slate-400">
+          {allSlang.length === 0 ? 'Memuat kamus...' : `Tidak ada istilah yang cocok dengan "${query}".`}
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((entry) => (
+            <div
+              key={entry.term}
+              className="flex flex-col gap-3 rounded-[1.75rem] border border-white/10 bg-slate-950/80 p-5 shadow-[0_10px_30px_rgba(15,23,42,0.25)] transition hover:border-cyan-400/20"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="text-lg font-semibold text-slate-100">{entry.term}</h3>
+                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${CATEGORY_COLORS[entry.category] ?? 'bg-slate-700/40 text-slate-300'}`}>
+                  {entry.category}
+                </span>
+              </div>
+              <p className="text-sm leading-6 text-slate-300">{entry.meaning}</p>
+              <div className="rounded-[1rem] bg-slate-900/70 px-4 py-3 text-xs leading-5 text-slate-400 italic border border-white/5">
+                "{entry.example}"
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const fetchPrediction = async (text: string, models: string[]) => {
   const url = '/predict/multi';
@@ -357,6 +502,8 @@ function App() {
               </div>
             </div>
           </div>
+
+          <SlangSearch />
         </main>
       </div>
     </div>

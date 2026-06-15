@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-05-30 17:24:12",
+  "timestamp": "2026-06-15 17:03:41",
   "note": "Pipeline(TF-IDF + model). Load langsung & predict dari raw text.",
   "tfidf_config": {
     "ngram_range": [
@@ -22,21 +22,21 @@
   ],
   "models": {
     "SVM": {
-      "config": "C=0.05",
-      "val_f1": 0.607,
-      "std": 0.014,
-      "train_f1": 0.755,
-      "gap": 0.1479,
-      "status": "mild",
+      "config": "C=0.10",
+      "val_f1": 0.6248,
+      "std": 0.0107,
+      "train_f1": 0.7973,
+      "gap": 0.1725,
+      "status": "OVERFIT",
       "path": "model_final/pipeline_svm.joblib"
     },
     "LR": {
-      "config": "C=0.10",
-      "val_f1": 0.6184,
-      "std": 0.0085,
-      "train_f1": 0.7363,
-      "gap": 0.1178,
-      "status": "mild",
+      "config": "C=1.00",
+      "val_f1": 0.6597,
+      "std": 0.0124,
+      "train_f1": 0.882,
+      "gap": 0.2223,
+      "status": "OVERFIT",
       "path": "model_final/pipeline_lr.joblib"
     },
     "RF": {
@@ -49,12 +49,12 @@
       "path": "model_final/pipeline_rf.joblib"
     },
     "XGBoost": {
-      "config": "d=3 a=0.5",
-      "val_f1": 0.6093,
-      "std": 0.0141,
-      "train_f1": 0.7479,
-      "gap": 0.1385,
-      "status": "mild",
+      "config": "d=4 a=0.1",
+      "val_f1": 0.6186,
+      "std": 0.0131,
+      "train_f1": 0.8004,
+      "gap": 0.1818,
+      "status": "OVERFIT",
       "path": "model_final/pipeline_xgboost.joblib"
     }
   }
