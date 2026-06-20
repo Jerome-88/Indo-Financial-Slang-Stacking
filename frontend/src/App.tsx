@@ -10,6 +10,7 @@ type ModelKey =
   | 'xlmr'
   | 'svm'
   | 'random_forest'
+  | 'xgboost'
   | 'logistic_regression';
 
 type ModelPrediction = {
@@ -36,8 +37,8 @@ const baselineModels = [
   { key: 'logistic_regression', label: 'Logistic Regression (Baseline)' },
 ];
 
-const sentimentTone = (label: string) => {
-  switch (label.toLowerCase()) {
+const sentimentTone = (label: string | undefined | null) => {
+  switch ((label ?? '').toLowerCase()) {
     case 'positive':
       return { badge: 'bg-emerald-500/15 text-emerald-300', accent: '#2dd4bf' };
     case 'neutral':
@@ -250,14 +251,16 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const ensemble = useMemo(
-    () => analysis?.ensemble ?? { label: 'NEUTRAL', confidence: 0 },
-    [analysis]
-  );
-  const ensembleAll = useMemo(
-    () => analysis?.ensemble_all ?? { label: 'NEUTRAL', confidence: 0 },
-    [analysis]
-  );
+  const ensemble = useMemo(() => {
+    const r = analysis?.ensemble;
+    if (!r || r.error) return { label: 'NEUTRAL', confidence: 0 };
+    return r;
+  }, [analysis]);
+  const ensembleAll = useMemo(() => {
+    const r = analysis?.ensemble_all;
+    if (!r || r.error) return { label: 'NEUTRAL', confidence: 0 };
+    return r;
+  }, [analysis]);
   const sentiment = sentimentTone(ensemble.label);
   const ensembleConfidenceText = analysis?.ensemble?.confidence !== undefined
     ? `${Math.round(analysis.ensemble.confidence * 100)}%`
@@ -292,6 +295,7 @@ function App() {
         'xlmr',
         'svm',
         'random_forest',
+        'xgboost',
         'logistic_regression',
       ]);
 
@@ -326,8 +330,11 @@ function App() {
     reader.readAsText(file);
   };
 
-  const getResult = (key: ModelKey) =>
-    analysis?.[key] ?? { label: '-', confidence: 0, latency_ms: 0 };
+  const getResult = (key: ModelKey) => {
+    const r = analysis?.[key];
+    if (!r || r.error) return { label: '-', confidence: 0, latency_ms: 0 };
+    return r;
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -414,6 +421,7 @@ function App() {
                 { key: 'xlmr', label: 'XLM-RoB' },
                 { key: 'svm', label: 'SVM' },
                 { key: 'random_forest', label: 'RF' },
+                { key: 'xgboost', label: 'XGBoost' },
                 { key: 'logistic_regression', label: 'LOGREG' },
               ].map((model) => {
                 const data = getResult(model.key as ModelKey);
