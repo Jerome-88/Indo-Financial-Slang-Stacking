@@ -3,11 +3,7 @@ import { ArrowRight, BookOpen, CloudUpload, Cpu, Filter, Search, Sparkles, X } f
 import { RadialBar, RadialBarChart, ResponsiveContainer, Tooltip } from 'recharts';
 
 type ModelKey =
-  | 'ensemble'
   | 'ensemble_all'
-  | 'indobert'
-  | 'indoroberta'
-  | 'xlmr'
   | 'svm'
   | 'random_forest'
   | 'xgboost'
@@ -25,15 +21,10 @@ type ModelPrediction = {
 
 type AnalysisResults = Record<ModelKey, ModelPrediction>;
 
-const tierModels = [
-  { key: 'indobert', label: 'IndoBERT (Base)' },
-  { key: 'indoroberta', label: 'IndoBERTweet (Uncased)' },
-  { key: 'xlmr', label: 'XLM-RoBERTa (Multilingual)' },
-];
-
 const baselineModels = [
   { key: 'svm', label: 'Support Vector Machine (SVM)' },
   { key: 'random_forest', label: 'Random Forest (RF)' },
+  { key: 'xgboost', label: 'XGBoost' },
   { key: 'logistic_regression', label: 'Logistic Regression (Baseline)' },
 ];
 
@@ -251,20 +242,11 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const ensemble = useMemo(() => {
-    const r = analysis?.ensemble;
-    if (!r || r.error) return { label: 'NEUTRAL', confidence: 0 };
-    return r;
-  }, [analysis]);
   const ensembleAll = useMemo(() => {
     const r = analysis?.ensemble_all;
     if (!r || r.error) return { label: 'NEUTRAL', confidence: 0 };
     return r;
   }, [analysis]);
-  const sentiment = sentimentTone(ensemble.label);
-  const ensembleConfidenceText = analysis?.ensemble?.confidence !== undefined
-    ? `${Math.round(analysis.ensemble.confidence * 100)}%`
-    : '—';
   const ensembleAllConfidenceText = analysis?.ensemble_all?.confidence !== undefined
     ? `${Math.round(analysis.ensemble_all.confidence * 100)}%`
     : '—';
@@ -288,11 +270,7 @@ function App() {
 
     try {
       const payload = await fetchPrediction(text, [
-        'ensemble',
         'ensemble_all',
-        'indobert',
-        'indoroberta',
-        'xlmr',
         'svm',
         'random_forest',
         'xgboost',
@@ -347,7 +325,7 @@ function App() {
                 Indonesian Financial Sentiment Analysis
               </h1>
               <p className="mt-4 max-w-2xl text-slate-400 sm:text-lg">
-                Sentimen finansial Indonesia dengan kombinasi karakter informal atau slang dalam media sosial dengan menggunakan model ensemble.
+                Analisis sentimen finansial Indonesia dengan TF-IDF dan ensemble traditional ML untuk mendeteksi slang pasar modal.
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 xl:w-[38%]">
@@ -358,8 +336,8 @@ function App() {
               </div>
               <div className="rounded-[1.75rem] border border-white/10 bg-slate-950/70 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.35)]">
                 <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Coverage</p>
-                <p className="mt-3 text-3xl font-semibold text-amber-300">Deep + Baseline</p>
-                <p className="mt-2 text-sm text-slate-400">Arsitektur ensemble lengkap</p>
+                <p className="mt-3 text-3xl font-semibold text-amber-300">Traditional ML</p>
+                <p className="mt-2 text-sm text-slate-400">SVM · RF · XGB · LR + Ensemble</p>
               </div>
             </div>
           </div>
@@ -414,11 +392,8 @@ function App() {
               <p className="text-xs uppercase tracking-[0.35em] text-cyan-300/80">Model Comparison Matrix</p>
               <h2 className="text-2xl font-semibold text-slate-100">Performa setiap arsitektur</h2>
             </div>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                { key: 'indobert', label: 'IndoBERT' },
-                { key: 'indoroberta', label: 'BERTweet' },
-                { key: 'xlmr', label: 'XLM-RoB' },
                 { key: 'svm', label: 'SVM' },
                 { key: 'random_forest', label: 'RF' },
                 { key: 'xgboost', label: 'XGBoost' },
@@ -449,24 +424,7 @@ function App() {
             </div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-slate-900/95 to-slate-950/95 p-8 shadow-glow">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.35em] text-cyan-300/80">Deep Ensemble Consensus</p>
-                  <p className="mt-3 text-3xl font-semibold text-slate-100">{ensemble.label}</p>
-                </div>
-                <div className="rounded-[1.5rem] bg-slate-950/90 px-5 py-4 text-right text-slate-300 shadow-inner shadow-slate-950/20">
-                  <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Score</p>
-                  <p className="mt-2 text-4xl font-semibold text-cyan-300">{ensembleConfidenceText}</p>
-                </div>
-              </div>
-              <p className="mt-6 max-w-xl text-sm leading-7 text-slate-400">
-                Consensus derived from IndoBERT architectures. Hasil ini menunjukkan kekuatan model transformer murni dalam menangkap nuansa sentimen pasar modal Indonesia.
-              </p>
-            </div>
-
-            <div className="rounded-[2rem] border border-white/10 bg-slate-900/80 p-8 shadow-glow">
+          <div className="rounded-[2rem] border border-white/10 bg-slate-900/80 p-8 shadow-glow">
               <div className="flex flex-col gap-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -509,7 +467,6 @@ function App() {
                 </div>
               </div>
             </div>
-          </div>
 
           <SlangSearch />
         </main>

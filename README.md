@@ -9,49 +9,53 @@ app_port: 7860
 ---
 
 # CS-IDX30 Financial Sentiment Analysis
-Sentiment analysis system for Indonesian stock market discourse, targeting slang-heavy texts from Twitter and Stockbit. Classifies text as **Negative**, **Neutral**, or **Positive**.
+
+Sentiment analysis system for Indonesian stock market discourse, targeting slang-heavy texts from Twitter and Stockbit. Classifies text as **Negative**, **Neutral**, or **Positive** using traditional ML models with TF-IDF features.
 
 ## Project Structure
 
 ```
 AOL_NLP/
 ├── README.md
+├── Dockerfile                     # HF Spaces deployment
 ├── requirements.txt
+├── requirements_light.txt         # Lightweight deps (no torch)
 ├── .gitignore
 ├── backend/
-│   ├── app.py              # FastAPI inference server
-│   └── train.py            # Transformer training pipeline (K-Fold CV)
+│   └── app.py                     # FastAPI inference server
 ├── notebooks/
-│   ├── merge.ipynb              # Merge 4 raw datasets into one
-│   ├── preprocess.ipynb         # Clean & normalize text
-│   └── train_experiment.ipynb  # Traditional ML experiments
+│   ├── merge.ipynb                # Merge 4 raw datasets into one
+│   ├── preprocess.ipynb           # Clean & normalize text
+│   └── train_experiment.ipynb     # Hyperparameter tuning & evaluation
 ├── Dataset/
-│   └── dataset_final_clean.csv     # Final preprocessed dataset (6,119 rows)
+│   └── dataset_final_clean.csv    # Final preprocessed dataset (6,120 rows)
 ├── model_final/
-│   ├── pipeline_svm.joblib
-│   ├── pipeline_lr.joblib
-│   ├── pipeline_rf.joblib
-│   ├── pipeline_xgboost.joblib
+│   ├── pipeline_svm.joblib        # Pipeline(TF-IDF + SVM)
+│   ├── pipeline_lr.joblib         # Pipeline(TF-IDF + LR)
+│   ├── pipeline_rf.joblib         # Pipeline(TF-IDF + RF)
+│   ├── pipeline_xgboost.joblib    # Pipeline(TF-IDF + XGBoost)
 │   ├── tfidf_vectorizer_30k.joblib
-│   └── model_info.json
-├── results/                # Visualization outputs (PNG)
-└── frontend/               # React + TypeScript dashboard
+│   ├── oof_cache.joblib           # OOF predictions cache
+│   └── model_info.json            # CV results & best params
+├── results/                       # Visualization outputs (PNG)
+└── frontend/                      # React + TypeScript dashboard
 ```
 
 ## Models
 
-| Model | Type | Val Macro F1 |
-|---|---|---|
-| SVM (TF-IDF) | Traditional | 0.607 |
-| Logistic Regression (TF-IDF) | Traditional | 0.618 |
-| Random Forest (TF-IDF) | Traditional | 0.568 |
-| XGBoost (TF-IDF) | Traditional | 0.609 |
-| IndoBERT | Transformer | ~0.74 |
-| IndoBERTweet | Transformer | ~0.74 |
-| XLM-RoBERTa | Transformer | ~0.74 |
-| **Ensemble (Transformers)** | **Transformer** | **0.743** |
+Hyperparameter tuning via **GridSearchCV** (SVM, LR) and **RandomizedSearchCV** (RF, XGBoost) with 5-Fold Stratified CV.
 
-> Transformer weights (`*.pt`) are not tracked by Git due to size. Run `train.py` to generate them.
+| Model | Tuning Method | OOF Macro F1 |
+|---|---|---|
+| SVM (LinearSVC) | GridSearchCV (9 combos) | 0.6241 |
+| **Logistic Regression** | **GridSearchCV (16 combos)** | **0.6593** |
+| Random Forest | RandomizedSearchCV (30/360) | 0.6351 |
+| XGBoost | RandomizedSearchCV (30/46,080) | 0.6353 |
+| Soft Voting Ensemble | — | 0.6552 |
+
+> OOF (Out-of-Fold) scores from `cross_val_predict` with Pipeline(TF-IDF + model) — leak-free evaluation.
+
+**TF-IDF Configuration:** 30k max features, min_df=3, unigram+bigram, sublinear_tf.
 
 ## Dataset
 
@@ -64,7 +68,12 @@ Merged from 4 sources (6,140 → 6,120 rows after cleaning):
 | ICCSCI | Stockbit | 1,842 |
 | PTBA | Stockbit | 495 |
 
-## Setup
+## Deployment
+
+- **Backend:** [HF Spaces](https://huggingface.co/spaces/siomay88/aol_nlp) (Docker, FastAPI)
+- **Frontend:** Vercel (React + Vite, proxies API to HF Spaces)
+
+## Setup (Local)
 
 ```bash
 # Install Python dependencies
@@ -74,7 +83,7 @@ pip install -r requirements.txt
 cd frontend && npm install
 ```
 
-## Running
+## Running (Local)
 
 **Backend (FastAPI):**
 ```bash
@@ -88,19 +97,15 @@ cd frontend && npm run dev
 # http://localhost:5173
 ```
 
-**Train transformers:**
-```bash
-python backend/train.py
-# Saves weights to saved_models_run_<timestamp>/ at project root
-```
-
 ## Notebook Workflow
 
 Run notebooks in order:
 
-1. `merge.ipynb`  merge raw datasets -> `dataset_combined_final.csv`
-2. `preprocess.ipynb`  clean & normalize -> `Dataset/dataset_final_clean.csv`
-3. `hyperparameter_search.ipynb`  tune traditional ML models -> `model_final/`
+1. `merge.ipynb` — merge raw datasets → `dataset_combined_final.csv`
+2. `preprocess.ipynb` — clean & normalize → `Dataset/dataset_final_clean.csv`
+3. `train_experiment.ipynb` — hyperparameter tuning, evaluation, ensemble → `model_final/`
+
+Set `RETRAIN = True` in the tuning cell to re-run training, or `False` to load from saved `.joblib` files.
 
 ## API Endpoints
 
@@ -108,5 +113,5 @@ Run notebooks in order:
 |---|---|---|
 | `/predict` | POST | Single-text prediction (one model) |
 | `/predict/batch` | POST | Batch prediction |
-| `/predict/multi` | POST | Multi-model prediction with XAI explanation |
->>>>>>> 5a3750c5068346381e42d0bd8876a6eb80924d4a
+| `/predict/multi` | POST | Multi-model prediction with ensemble |
+| `/slang/search` | GET | Search Indonesian financial slang dictionary |
