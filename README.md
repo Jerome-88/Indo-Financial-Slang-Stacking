@@ -1,13 +1,3 @@
----
-title: CS IDX30 Financial Sentiment API
-emoji: 📈
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-pinned: false
-app_port: 7860
----
-
 # CS-IDX30 Financial Sentiment Analysis
 
 Sentiment analysis system for Indonesian stock market discourse, targeting slang-heavy texts from Twitter and Stockbit. Classifies text as **Negative**, **Neutral**, or **Positive** using traditional ML models with TF-IDF features.
